@@ -1,582 +1,506 @@
 <!DOCTYPE html>
-<html lang="de" class="h-full bg-slate-100">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Druckgenerator</title>
+    <title>PDF Druckgenerator mit Supabase</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- jsPDF Library -->
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- jsPDF for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        /* A4 Landscape Aspect Ratio Box (297mm x 210mm) */
-        .a4-landscape-aspect {
-            aspect-ratio: 297 / 210;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Container queries for dynamic scaled fonts inside document preview */
+        .ausweis-container {
+            container-type: inline-size;
         }
     </style>
 </head>
-<body class="h-full text-slate-800 flex flex-col justify-between font-sans">
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col">
 
-    <header class="bg-white border-b border-slate-200 py-4 px-6 shadow-sm">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md">
-                    <i class="fa-solid fa-print text-xl"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold text-slate-900 leading-tight">PDF Druckgenerator</h1>
-                </div>
+    <!-- Top Header -->
+    <header class="bg-white border-b border-slate-200 px-6 py-4 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-indigo-600 text-white rounded-lg shadow">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                </svg>
             </div>
+            <div>
+                <h1 class="font-bold text-xl text-slate-900 leading-tight">PDF Druckgenerator</h1>
+                <p class="text-xs text-slate-500">Fahrausweise verwalten & drucken</p>
+            </div>
+        </div>
+
+        <!-- Connection Status Badge -->
+        <div id="statusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="statusText">Supabase verbunden</span>
         </div>
     </header>
 
-    <main class="max-w-6xl w-full mx-auto p-4 md:p-8 flex-1">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
-            <!-- Left Column: Input Form -->
-            <div class="lg:col-span-5 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
-                <form id="pdfForm" onsubmit="generateAndPrintPDF(event)" class="space-y-5">
-                    
-                    <!-- Foto Upload -->
+    <!-- Main Content Grid -->
+    <main class="flex-1 p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1700px] w-full mx-auto">
+        
+        <!-- Left Panel: Form & Controls -->
+        <section class="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between space-y-6">
+            <div class="space-y-5">
+                <!-- Navigation Controls -->
+                <div class="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <button onclick="navigateRecord(-1)" id="btnPrev" class="px-3 py-1.5 bg-white border border-slate-300 rounded-md shadow-sm text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition">
+                        &larr; Zurück
+                    </button>
+                    <span id="recordCounter" class="text-xs font-semibold text-slate-600">Datensatz 0 / 0</span>
+                    <button onclick="navigateRecord(1)" id="btnNext" class="px-3 py-1.5 bg-white border border-slate-300 rounded-md shadow-sm text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition">
+                        Vor &rarr;
+                    </button>
+                </div>
+
+                <!-- Form Inputs -->
+                <form id="ausweisForm" onsubmit="event.preventDefault();" class="space-y-4">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Foto</label>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Vorname</label>
+                        <input type="text" id="vorname" oninput="updateLivePreview()" placeholder="z.B. Bär" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Nachname (Name)</label>
+                        <input type="text" id="nachname" oninput="updateLivePreview()" placeholder="z.B. Bambi" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Geburtsdatum</label>
+                            <input type="text" id="geburtsdatum" oninput="updateLivePreview()" placeholder="12.12.2012" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Geburtsort</label>
+                            <input type="text" id="geburtsort" oninput="updateLivePreview()" placeholder="z.B. Musterstadt" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <!-- Passfoto Upload with Thumbnail -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Passfoto</label>
                         <div class="flex items-center space-x-3">
-                            <label class="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center space-x-2 transition-all w-full justify-center">
-                                <i class="fa-solid fa-camera text-slate-500"></i>
-                                <span id="uploadBtnText">Foto auswählen...</span>
-                                <input type="file" id="fotoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                            <!-- Thumbnail Preview with Zoom trigger -->
+                            <div id="thumbWrapper" onclick="openImageZoomModal()" class="w-12 h-14 bg-slate-100 border border-slate-300 rounded-md overflow-hidden flex items-center justify-center cursor-pointer hover:opacity-80 transition relative group">
+                                <img id="thumbFoto" src="" class="w-full h-full object-cover object-left hidden" alt="Miniaturansicht">
+                                <svg id="thumbPlaceholder" class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                                <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition">🔎</div>
+                            </div>
+
+                            <label class="flex-1 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 border-dashed rounded-lg p-3 text-center transition">
+                                <span class="text-xs font-medium text-slate-600 block">Passfoto auswählen...</span>
+                                <input type="file" id="fotoInput" accept="image/*" onchange="handleFotoUpload(event)" class="hidden">
                             </label>
-                            <button type="button" id="removePhotoBtn" onclick="removePhoto()" class="hidden bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-lg border border-red-200 transition-colors" title="Foto löschen">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
                         </div>
                     </div>
-
-                    <!-- Vorname (1 Zeile) -->
-                    <div>
-                        <label for="vorname" class="block text-sm font-semibold text-slate-700 mb-1.5">Vorname</label>
-                        <div class="relative rounded-lg shadow-sm">
-                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                <i class="fa-regular fa-user"></i>
-                            </div>
-                            <input type="text" id="vorname" placeholder="Vorname"
-                                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white text-slate-800 text-sm transition-all outline-none"
-                                oninput="handleTextInput(this, 'vorname', 1)" />
-                        </div>
-                        <p id="vornameHint" class="hidden text-[11px] mt-1 font-medium"></p>
-                    </div>
-
-                    <!-- Name (2 Zeilen erlaubt) -->
-                    <div>
-                        <label for="nachname" class="block text-sm font-semibold text-slate-700 mb-1.5">
-                            Name <span class="text-xs font-normal text-slate-500">(max. 2 Zeilen)</span>
-                        </label>
-                        <div class="relative rounded-lg shadow-sm">
-                            <div class="absolute top-3 left-0 pl-3.5 flex items-start pointer-events-none text-slate-400">
-                                <i class="fa-solid fa-user"></i>
-                            </div>
-                            <textarea id="nachname" rows="2" placeholder="Nachname / Familienname"
-                                class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white text-slate-800 text-sm transition-all outline-none resize-none"
-                                oninput="handleTextInput(this, 'nachname', 2)"></textarea>
-                        </div>
-                        <p id="nachnameHint" class="hidden text-[11px] mt-1 font-medium"></p>
-                    </div>
-
-                    <!-- geb. am -->
-                    <div>
-                        <label for="gebAm" class="block text-sm font-semibold text-slate-700 mb-1.5">geb. am</label>
-                        <div class="relative rounded-lg shadow-sm">
-                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                <i class="fa-regular fa-calendar"></i>
-                            </div>
-                            <input type="text" id="gebAm" placeholder="TT.MM.JJJJ" maxlength="10"
-                                class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white text-slate-800 text-sm transition-all outline-none"
-                                oninput="handleDateInput(this)" onblur="finalizeDateInput(this)" />
-                        </div>
-                        <p id="gebAmError" class="hidden text-xs text-red-600 mt-1 flex items-center space-x-1">
-                            <i class="fa-solid fa-circle-exclamation"></i>
-                            <span>Ungültiges Datum. Bitte ein echtes Datum eingeben (z. B. 15.05.1990).</span>
-                        </p>
-                    </div>
-
-                    <!-- in (2 Zeilen erlaubt) -->
-                    <div>
-                        <label for="gebOrt" class="block text-sm font-semibold text-slate-700 mb-1.5">
-                            in <span class="text-xs font-normal text-slate-500">(Geburtsort, max. 2 Zeilen)</span>
-                        </label>
-                        <div class="relative rounded-lg shadow-sm">
-                            <div class="absolute top-3 left-0 pl-3.5 flex items-start pointer-events-none text-slate-400">
-                                <i class="fa-solid fa-location-dot"></i>
-                            </div>
-                            <textarea id="gebOrt" rows="2" placeholder="Geburtsort"
-                                class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white text-slate-800 text-sm transition-all outline-none resize-none"
-                                oninput="handleTextInput(this, 'gebOrt', 2)"></textarea>
-                        </div>
-                        <p id="gebOrtHint" class="hidden text-[11px] mt-1 font-medium"></p>
-                    </div>
-
-                    <!-- Drucken Button -->
-                    <div class="pt-3">
-                        <button type="submit" 
-                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-indigo-200 transition-all duration-200 flex items-center justify-center space-x-2 text-base active:scale-[0.99]">
-                            <i class="fa-solid fa-print"></i>
-                            <span>Drucken</span>
-                        </button>
-                    </div>
-
                 </form>
             </div>
 
-            <!-- Right Column: Live Preview -->
-            <div class="lg:col-span-7 flex flex-col items-center">
-                <div class="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center">
-                    <div class="w-full flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-                        <h2 class="text-base font-bold text-slate-800">Live-Vorschau (A4 Querformat)</h2>
-                    </div>
-
-                    <!-- A4 Querformat Visual Container -->
-                    <div class="w-full bg-slate-200 p-4 rounded-xl flex justify-center shadow-inner overflow-hidden">
-                        <div id="previewSheet" class="a4-landscape-aspect w-full bg-white shadow-md rounded border border-slate-300 relative select-none overflow-hidden">
-                            
-                            <!-- 4x2 Grid helper lines (Faint) -->
-                            <div class="absolute inset-0 grid grid-cols-4 grid-rows-2 pointer-events-none border-dashed border-slate-200">
-                                <div class="border-r border-b border-slate-200"></div>
-                                <div class="border-r border-b border-slate-200"></div>
-                                <div class="border-r border-b border-slate-200"></div>
-                                <div class="border-b border-slate-200"></div>
-                                
-                                <!-- Bottom-Left Panel ("Inhaber des Fahrausweises") -->
-                                <div class="relative p-2 flex flex-col justify-start">
-                                    <div class="text-[0.55rem] font-bold text-slate-400 mb-1 border-b border-slate-100 pb-0.5">Inhaber des Fahrausweises</div>
-                                    
-                                    <!-- Content Area inside Panel -->
-                                    <div class="flex items-start space-x-2 mt-1">
-                                        <!-- Photo Preview Box -->
-                                        <div id="pFotoBox" class="w-[38%] aspect-[28/37] border border-slate-300 rounded bg-slate-50 flex flex-col items-center justify-center overflow-hidden shrink-0">
-                                            <i id="pFotoPlaceholder" class="fa-regular fa-image text-slate-300 text-lg"></i>
-                                            <img id="pFotoImg" class="w-full h-full object-cover hidden" alt="Foto Vorschau" />
-                                        </div>
-
-                                        <!-- Text Fields Preview -->
-                                        <div class="flex-1 min-w-0 space-y-1 text-[0.55rem] leading-tight text-slate-900 font-sans">
-                                            <div>
-                                                <div id="pVorname" class="font-semibold text-slate-800 truncate"></div>
-                                            </div>
-                                            <div>
-                                                <div id="pNachname" class="font-semibold text-slate-800 break-words line-clamp-2"></div>
-                                            </div>
-                                            <div>
-                                                <div id="pGebAm" class="text-slate-700 truncate"></div>
-                                            </div>
-                                            <div>
-                                                <div id="pGebOrt" class="text-slate-700 break-words line-clamp-2"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-
-                                <div class="border-r border-slate-200"></div>
-                                <div class="border-r border-slate-200"></div>
-                                <div></div>
-                            </div>
-
-                        </div>
-                    </div>
+            <!-- Action Buttons -->
+            <div class="space-y-2 pt-4 border-t border-slate-200">
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="resetForm()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition flex items-center justify-center space-x-1">
+                        <span>➕ Neu</span>
+                    </button>
+                    <button onclick="openDeleteModal()" id="btnDelete" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-semibold text-xs transition flex items-center justify-center space-x-1">
+                        <span>🗑️ Löschen</span>
+                    </button>
                 </div>
+                <button onclick="saveAndPrint()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-sm shadow-md hover:shadow-lg transition flex items-center justify-center space-x-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                    </svg>
+                    <span>Drucken & Speichern</span>
+                </button>
             </div>
+        </section>
 
-        </div>
+        <!-- Right Panel: Live Document Preview -->
+        <section class="lg:col-span-8 bg-slate-800 rounded-xl shadow-inner p-2 md:p-4 flex items-center justify-center overflow-hidden min-h-[500px]">
+            <!-- Responsive Container Aspect Ratio 1024 / 724 -->
+            <div class="w-full max-w-[1024px] aspect-[1024/724] relative bg-white shadow-2xl overflow-hidden ausweis-container">
+                <!-- Background Template Image -->
+                <img id="ausweisTemplate" src="Fahrausweis-fuer-Krane-1024x724-2.jpeg" onerror="this.onerror=null; this.src='https://placehold.co/1024x724/e2e8f0/334155?text=Fahrausweis+Vorlage';" alt="Fahrausweis Vorlage" class="w-full h-full object-fill select-none">
+
+                <!-- OVERLAY: Passfoto (Uncropped, left aligned in photo frame) -->
+                <div class="absolute left-[3.2%] top-[53.5%] w-[11.2%] h-[20.2%] flex items-start justify-start overflow-hidden">
+                    <img id="prevFoto" src="" class="w-full h-full object-contain object-left hidden" alt="Passfoto">
+                </div>
+
+                <!-- OVERLAY: Vorname (Indented first line, starting right after 'Vorname:', wrap starts left) -->
+                <div id="prevVorname" class="absolute left-[15.5%] top-[53.2%] w-[13.5%] text-[1.1cqw] font-bold text-slate-900 leading-[1.3] pointer-events-none break-words whitespace-pre-line" style="text-indent: 2.5cqw;"></div>
+
+                <!-- OVERLAY: Nachname (On primary line under 'Name:') -->
+                <div id="prevNachname" class="absolute left-[15.5%] top-[58.8%] w-[13.5%] text-[1.1cqw] font-bold text-slate-900 leading-[1.3] pointer-events-none break-words whitespace-pre-line"></div>
+
+                <!-- OVERLAY: Geburtsdatum (On line right behind 'geb. am:') -->
+                <div id="prevGeburtsdatum" class="absolute left-[16.2%] top-[64.5%] w-[13.5%] text-[1.0cqw] font-bold text-slate-900 pointer-events-none whitespace-nowrap"></div>
+
+                <!-- OVERLAY: Geburtsort (On line right behind 'in:') -->
+                <div id="prevGeburtsort" class="absolute left-[14.2%] top-[68.8%] w-[13.5%] text-[1.0cqw] font-bold text-slate-900 pointer-events-none whitespace-nowrap"></div>
+            </div>
+        </section>
+
     </main>
 
-    <!-- Hidden iframe for automatic print execution -->
-    <iframe id="printIframe" class="hidden"></iframe>
+    <!-- Modal: Image Zoom -->
+    <div id="zoomModal" onclick="closeImageZoomModal()" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="relative max-w-md w-full bg-white rounded-xl shadow-2xl p-4 overflow-hidden" onclick="event.stopPropagation()">
+            <button onclick="closeImageZoomModal()" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 class="text-sm font-bold text-slate-700 mb-3">Passfoto Vergrößerung</h3>
+            <div class="flex justify-center bg-slate-100 rounded-lg p-2 max-h-[70vh] overflow-hidden">
+                <img id="modalZoomImg" src="" class="max-h-[60vh] object-contain rounded" alt="Passfoto Großansicht">
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Delete Confirmation -->
+    <div id="deleteModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
+            <div class="flex items-center space-x-3 text-rose-600">
+                <div class="p-2 bg-rose-100 rounded-full">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <h3 class="font-bold text-lg text-slate-900">Datensatz löschen?</h3>
+            </div>
+            <p class="text-xs text-slate-600">Möchtest du diesen Fahrausweis-Eintrag wirklich dauerhaft entfernen? Dies kann nicht rückgängig gemacht werden.</p>
+            <div class="flex justify-end space-x-3 pt-2">
+                <button onclick="closeDeleteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">Abbrechen</button>
+                <button onclick="confirmDeleteRecord()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold">Löschen</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const { jsPDF } = window.jspdf;
-        let photoDataUrl = null;
-        let dummyDoc = null;
+        // --- Application Configuration & State ---
+        const RAW_SUPABASE_URL = "https://otcegorzfuyumnflanas.supabase.co";
+        const RAW_SUPABASE_KEY = "sb_publishable_2cN6h2kEXJxzhYpN-wmRfA_q5Dzm6Lr";
+        const TABLE_NAME = "fuehrerschein_daten";
 
-        /**
-         * Helper to escape HTML characters in live preview
-         */
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        let supabaseClient = null;
+        let isLocalMode = false;
+        let records = [];
+        let currentIndex = -1;
+        let currentFotoUrl = "";
+
+        // --- Initialization ---
+        window.onload = function() {
+            initSupabase();
+            loadRecordsFromSupabase();
+        };
+
+        function setConnectionStatus(type, message) {
+            const statusBadge = document.getElementById('statusBadge');
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+
+            statusText.textContent = message;
+            if (type === 'emerald') {
+                statusBadge.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+            } else if (type === 'amber') {
+                statusBadge.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+            } else {
+                statusBadge.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200";
+                statusDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+            }
         }
 
-        /**
-         * Gets or creates a singleton jsPDF dummy instance for precise text width calculation
-         */
-        function getDummyDoc() {
-            if (!dummyDoc && window.jspdf) {
-                dummyDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-            }
-            return dummyDoc;
-        }
-
-        /**
-         * Calculates text wrapping and font size fitting inside exact PDF width
-         */
-        function calculateTextFit(text, maxWidth = 33, defaultFontSize = 9, minFontSize = 6.5, maxLines = 1) {
-            const doc = getDummyDoc();
-            if (!text || !doc) return { fontSize: defaultFontSize, lines: [], isOverflow: false };
-
-            let fontSize = defaultFontSize;
-            let lines = [];
-
-            const rawLines = text.split('\n');
-            if (rawLines.length > maxLines) {
-                text = rawLines.slice(0, maxLines).join(' ');
-            }
-
-            while (fontSize >= minFontSize) {
-                doc.setFont('Helvetica', 'normal');
-                doc.setFontSize(fontSize);
-                lines = doc.splitTextToSize(text, maxWidth);
-                if (lines.length <= maxLines) {
-                    return { fontSize, lines, isOverflow: false, text };
-                }
-                fontSize -= 0.5;
-            }
-
-            // At minFontSize, check if it exceeds maxLines
-            doc.setFontSize(minFontSize);
-            lines = doc.splitTextToSize(text, maxWidth);
-            return {
-                fontSize: minFontSize,
-                lines: lines.slice(0, maxLines),
-                isOverflow: lines.length > maxLines,
-                text
-            };
-        }
-
-        /**
-         * Restricts text input so it never overflows allowed space at minimum font size
-         */
-        function handleTextInput(input, fieldType, maxLines) {
-            let val = input.value;
-
-            // Prevent manual line breaks exceeding max lines
-            const rawLines = val.split('\n');
-            if (rawLines.length > maxLines) {
-                val = rawLines.slice(0, maxLines).join(' ');
-                input.value = val;
-            }
-
-            // Test fit at min font size (6.5pt)
-            let fit = calculateTextFit(val, 33, 9, 6.5, maxLines);
-
-            // Truncate character-by-character if exceeding limits
-            while (fit.isOverflow && val.length > 0) {
-                val = val.slice(0, -1);
-                input.value = val;
-                fit = calculateTextFit(val, 33, 9, 6.5, maxLines);
-            }
-
-            // Update user feedback hint below input
-            const hintEl = document.getElementById(fieldType + 'Hint');
-            if (hintEl) {
-                if (fit.isOverflow || val.length >= 80) {
-                    hintEl.textContent = "Maximale Textlänge für das Feld erreicht!";
-                    hintEl.className = "text-[11px] mt-1 font-semibold text-red-600 block";
-                } else if (fit.fontSize < 9 && val.length > 0) {
-                    hintEl.textContent = `Schriftgröße im Druck automatisch angepasst (${fit.fontSize} pt)`;
-                    hintEl.className = "text-[11px] mt-1 font-medium text-amber-600 block";
+        function initSupabase() {
+            try {
+                // Säubert die URL von etwaigen angehängten /rest/v1 Endpunkten für den JS Client
+                let baseUrl = RAW_SUPABASE_URL.trim().replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+                if (window.supabase && baseUrl && RAW_SUPABASE_KEY) {
+                    supabaseClient = window.supabase.createClient(baseUrl, RAW_SUPABASE_KEY);
                 } else {
-                    hintEl.textContent = "";
-                    hintEl.className = "hidden";
+                    switchToLocalMode("Lokaler Modus");
                 }
+            } catch (err) {
+                console.warn("Supabase Init Error:", err);
+                switchToLocalMode("Lokaler Modus");
             }
-
-            updatePreview();
         }
 
-        /**
-         * Validates if a string is a real calendar date (DD.MM.YYYY)
-         */
-        function isValidDate(dateStr) {
-            if (!dateStr) return true; // empty is handled during validation if needed
-            const parts = dateStr.split('.');
-            if (parts.length !== 3) return false;
-
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10);
-            const year = parseInt(parts[2], 10);
-
-            if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
-            if (parts[2].length !== 4) return false;
-            if (month < 1 || month > 12) return false;
-
-            const currentYear = new Date().getFullYear();
-            if (year < 1900 || year > currentYear) return false;
-
-            // Days in specific month (accounts for leap years)
-            const daysInMonth = new Date(year, month, 0).getDate();
-            if (day < 1 || day > daysInMonth) return false;
-
-            return true;
+        function switchToLocalMode(msg) {
+            isLocalMode = true;
+            setConnectionStatus("amber", msg || "Lokaler Modus");
+            updateNavigationUI();
         }
 
-        /**
-         * Validates date input UI state and shows error if invalid
-         */
-        function validateDate(input) {
-            const val = input.value.trim();
-            const errorEl = document.getElementById('gebAmError');
-            
-            if (val.length > 0 && !isValidDate(val)) {
-                input.classList.add('border-red-500', 'bg-red-50', 'focus:ring-red-500', 'focus:border-red-500');
-                input.classList.remove('border-slate-300', 'bg-slate-50', 'focus:ring-indigo-500', 'focus:border-indigo-500');
-                if (errorEl) errorEl.classList.remove('hidden');
-                return false;
+        async function loadRecordsFromSupabase() {
+            if (!supabaseClient || isLocalMode) return;
+            try {
+                const { data, error } = await supabaseClient.from(TABLE_NAME).select('*').order('created_at', { ascending: true });
+                if (error) {
+                    const errMsg = error.message || "";
+                    if (errMsg.includes("Load failed") || errMsg.includes("Failed to fetch") || errMsg.includes("NetworkError")) {
+                        switchToLocalMode("Lokaler Modus (Offline)");
+                        return;
+                    }
+                    setConnectionStatus("amber", "Supabase: RLS/Tabelle prüfen");
+                    return;
+                }
+
+                isLocalMode = false;
+                setConnectionStatus("emerald", "Supabase verbunden");
+                records = data || [];
+                if (records.length > 0) {
+                    currentIndex = records.length - 1;
+                    populateFormWithRecord(records[currentIndex]);
+                } else {
+                    resetForm();
+                }
+            } catch (err) {
+                console.warn("Netzwerkunterbrechung:", err);
+                switchToLocalMode("Lokaler Modus");
+            }
+        }
+
+        // --- Form & UI Handling ---
+        function updateLivePreview() {
+            const vorname = document.getElementById('vorname').value;
+            const nachname = document.getElementById('nachname').value;
+            const geburtsdatum = document.getElementById('geburtsdatum').value;
+            const geburtsort = document.getElementById('geburtsort').value;
+
+            document.getElementById('prevVorname').innerText = vorname;
+            document.getElementById('prevNachname').innerText = nachname;
+            document.getElementById('prevGeburtsdatum').innerText = geburtsdatum;
+            document.getElementById('prevGeburtsort').innerText = geburtsort;
+
+            // Update photo preview
+            const prevFoto = document.getElementById('prevFoto');
+            const thumbFoto = document.getElementById('thumbFoto');
+            const thumbPlaceholder = document.getElementById('thumbPlaceholder');
+
+            if (currentFotoUrl) {
+                prevFoto.src = currentFotoUrl;
+                prevFoto.classList.remove('hidden');
+                
+                thumbFoto.src = currentFotoUrl;
+                thumbFoto.classList.remove('hidden');
+                thumbPlaceholder.classList.add('hidden');
             } else {
-                input.classList.remove('border-red-500', 'bg-red-50', 'focus:ring-red-500', 'focus:border-red-500');
-                input.classList.add('border-slate-300', 'bg-slate-50', 'focus:ring-indigo-500', 'focus:border-indigo-500');
-                if (errorEl) errorEl.classList.add('hidden');
-                return true;
+                prevFoto.classList.add('hidden');
+                thumbFoto.classList.add('hidden');
+                thumbPlaceholder.classList.remove('hidden');
             }
         }
 
-        /**
-         * Handles photo file selection
-         */
-        function handlePhotoUpload(event) {
+        function handleFotoUpload(event) {
             const file = event.target.files[0];
-            if (!file) return;
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentFotoUrl = e.target.result;
+                    updateLivePreview();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                photoDataUrl = e.target.result;
-                document.getElementById('uploadBtnText').textContent = file.name;
-                document.getElementById('removePhotoBtn').classList.remove('hidden');
-                updatePreview();
+        function populateFormWithRecord(rec) {
+            if (!rec) return;
+            document.getElementById('vorname').value = rec.vorname || '';
+            document.getElementById('nachname').value = rec.nachname || '';
+            document.getElementById('geburtsdatum').value = rec.geburtsdatum || '';
+            document.getElementById('geburtsort').value = rec.geburtsort || '';
+            currentFotoUrl = rec.foto_url || '';
+            updateLivePreview();
+            updateNavigationUI();
+        }
+
+        function resetForm() {
+            document.getElementById('ausweisForm').reset();
+            currentFotoUrl = '';
+            currentIndex = records.length;
+            updateLivePreview();
+            updateNavigationUI();
+        }
+
+        function updateNavigationUI() {
+            const total = records.length;
+            const counter = document.getElementById('recordCounter');
+            const btnPrev = document.getElementById('btnPrev');
+            const btnNext = document.getElementById('btnNext');
+
+            if (total === 0 || currentIndex < 0 || currentIndex >= total) {
+                counter.textContent = `Neuer Datensatz (${total})`;
+                btnPrev.disabled = total === 0;
+                btnNext.disabled = true;
+            } else {
+                counter.textContent = `Datensatz ${currentIndex + 1} / ${total}`;
+                btnPrev.disabled = currentIndex <= 0;
+                btnNext.disabled = currentIndex >= total - 1;
+            }
+        }
+
+        function navigateRecord(direction) {
+            if (records.length === 0) return;
+            currentIndex += direction;
+            if (currentIndex < 0) currentIndex = 0;
+            if (currentIndex >= records.length) currentIndex = records.length - 1;
+            populateFormWithRecord(records[currentIndex]);
+        }
+
+        // --- Persistence & Printing ---
+        async function saveAndPrint() {
+            const vorname = document.getElementById('vorname').value;
+            const nachname = document.getElementById('nachname').value;
+            const geburtsdatum = document.getElementById('geburtsdatum').value;
+            const geburtsort = document.getElementById('geburtsort').value;
+
+            const recordData = {
+                vorname: vorname,
+                nachname: nachname,
+                geburtsdatum: geburtsdatum,
+                geburtsort: geburtsort,
+                foto_url: currentFotoUrl
             };
-            reader.readAsDataURL(file);
-        }
 
-        /**
-         * Removes selected photo
-         */
-        function removePhoto() {
-            photoDataUrl = null;
-            document.getElementById('fotoInput').value = '';
-            document.getElementById('uploadBtnText').textContent = 'Foto auswählen...';
-            document.getElementById('removePhotoBtn').classList.add('hidden');
-            updatePreview();
-        }
-
-        /**
-         * Formats date automatically while typing digits (DD.MM.YYYY)
-         */
-        function handleDateInput(input) {
-            let digits = input.value.replace(/\D/g, '');
-            if (digits.length > 8) {
-                digits = digits.substring(0, 8);
-            }
-
-            let formatted = '';
-            if (digits.length > 4) {
-                formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
-            } else if (digits.length > 2) {
-                formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4);
-            } else {
-                formatted = digits;
-            }
-
-            input.value = formatted;
-            validateDate(input);
-            updatePreview();
-        }
-
-        /**
-         * Ensures birth year is always 4 digits when leaving field or submitting form
-         */
-        function finalizeDateInput(input) {
-            let digits = input.value.replace(/\D/g, '');
-            if (digits.length >= 5) {
-                let day = digits.slice(0, 2);
-                let month = digits.slice(2, 4);
-                let yearStr = digits.slice(4);
-
-                if (yearStr.length === 2) {
-                    const yearNum = parseInt(yearStr, 10);
-                    const currentShortYear = new Date().getFullYear() % 100;
-                    const fullYear = yearNum <= currentShortYear ? 2000 + yearNum : 1900 + yearNum;
-                    input.value = `${day}.${month}.${fullYear}`;
-                } else if (yearStr.length === 1) {
-                    const yearNum = parseInt(yearStr, 10);
-                    input.value = `${day}.${month}.200${yearNum}`;
-                } else if (yearStr.length === 3) {
-                    input.value = `${day}.${month}.1${yearStr}`;
+            if (supabaseClient && !isLocalMode) {
+                try {
+                    const { data, error } = await supabaseClient.from(TABLE_NAME).insert([recordData]).select();
+                    if (error) {
+                        console.warn("Supabase Speicherfehler:", error);
+                        switchToLocalMode("Lokaler Modus");
+                        records.push(recordData);
+                        currentIndex = records.length - 1;
+                    } else if (data && data.length > 0) {
+                        records.push(data[0]);
+                        currentIndex = records.length - 1;
+                    }
+                } catch (err) {
+                    console.warn("Netzwerkfehler beim Speichern:", err);
+                    switchToLocalMode("Lokaler Modus");
+                    records.push(recordData);
+                    currentIndex = records.length - 1;
                 }
-            }
-
-            validateDate(input);
-            updatePreview();
-        }
-
-        /**
-         * Updates the live preview box with input text and photo
-         */
-        function updatePreview() {
-            const vorname = document.getElementById('vorname').value.trim();
-            const nachname = document.getElementById('nachname').value.trim();
-            const gebAmInput = document.getElementById('gebAm');
-            const gebAm = gebAmInput.value.trim();
-            const gebOrt = document.getElementById('gebOrt').value.trim();
-
-            const isDateValid = isValidDate(gebAm);
-
-            // Vorname preview & scale
-            const fitVorname = calculateTextFit(vorname, 33, 9, 6.5, 1);
-            const pVorname = document.getElementById('pVorname');
-            pVorname.textContent = fitVorname.lines.join(' ') || vorname;
-            const scaleVorname = fitVorname.fontSize / 9;
-            pVorname.style.fontSize = `${0.55 * scaleVorname}rem`;
-
-            // Nachname preview & scale
-            const fitNachname = calculateTextFit(nachname, 33, 9, 6.5, 2);
-            const pNachname = document.getElementById('pNachname');
-            pNachname.innerHTML = fitNachname.lines.map(l => `<div>${escapeHtml(l)}</div>`).join('') || escapeHtml(nachname);
-            const scaleNachname = fitNachname.fontSize / 9;
-            pNachname.style.fontSize = `${0.55 * scaleNachname}rem`;
-
-            // geb. am preview
-            document.getElementById('pGebAm').textContent = isDateValid ? gebAm : '';
-
-            // Geburtsort preview & scale
-            const fitGebOrt = calculateTextFit(gebOrt, 33, 9, 6.5, 2);
-            const pGebOrt = document.getElementById('pGebOrt');
-            pGebOrt.innerHTML = fitGebOrt.lines.map(l => `<div>${escapeHtml(l)}</div>`).join('') || escapeHtml(gebOrt);
-            const scaleGebOrt = fitGebOrt.fontSize / 9;
-            pGebOrt.style.fontSize = `${0.55 * scaleGebOrt}rem`;
-
-            const pFotoImg = document.getElementById('pFotoImg');
-            const pFotoPlaceholder = document.getElementById('pFotoPlaceholder');
-
-            if (photoDataUrl) {
-                pFotoImg.src = photoDataUrl;
-                pFotoImg.classList.remove('hidden');
-                pFotoPlaceholder.classList.add('hidden');
             } else {
-                pFotoImg.classList.add('hidden');
-                pFotoPlaceholder.classList.remove('hidden');
+                records.push(recordData);
+                currentIndex = records.length - 1;
             }
+
+            updateNavigationUI();
+            generatePDF(vorname, nachname, geburtsdatum, geburtsort, currentFotoUrl);
         }
 
-        /**
-         * STREAMING_CHUNK:Defining PDF generation and print logic...
-         * Generates the PDF document (A4 Landscape) and places items at the bottom-left panel
-         */
-        function generateAndPrintPDF(event) {
-            event.preventDefault();
-
-            const gebAmInput = document.getElementById('gebAm');
-            finalizeDateInput(gebAmInput);
-
-            if (!validateDate(gebAmInput)) {
-                gebAmInput.focus();
-                return;
-            }
-
-            const vorname = document.getElementById('vorname').value.trim();
-            const nachname = document.getElementById('nachname').value.trim();
-            const gebAm = gebAmInput.value.trim();
-            const gebOrt = document.getElementById('gebOrt').value.trim();
-
-            // Create A4 Landscape PDF (297mm x 210mm)
+        function generatePDF(vorname, nachname, geburtsdatum, geburtsort, fotoUrl) {
+            const { jsPDF } = window.jspdf;
             const doc = new jsPDF({
                 orientation: 'landscape',
                 unit: 'mm',
                 format: 'a4'
             });
 
-            // Exact Coordinates for "Inhaber des Fahrausweises" panel (Bottom-Left)
-            const photoX = 6;
-            const photoY = 116;
-            const photoW = 28;
-            const photoH = 37;
+            const templateImg = document.getElementById('ausweisTemplate');
 
-            const textX = 36;
-            const maxTextWidth = 33; // Fits inside panel width limit
+            // Draw Background Template full A4 (297 x 210 mm)
+            doc.addImage(templateImg, 'JPEG', 0, 0, 297, 210);
 
-            doc.setFont('Helvetica', 'normal');
-            doc.setTextColor(0, 0, 0);
-
-            // 1. Vorname (1 Zeile mit Auto-Scale)
-            if (vorname) {
-                const fit = calculateTextFit(vorname, maxTextWidth, 9, 6.5, 1);
-                doc.setFontSize(fit.fontSize);
-                doc.text(fit.lines[0] || vorname, textX, 120);
-            }
-
-            // 2. Name (max. 2 Zeilen mit Auto-Scale)
-            if (nachname) {
-                const fit = calculateTextFit(nachname, maxTextWidth, 9, 6.5, 2);
-                doc.setFontSize(fit.fontSize);
-                const lineHeight = fit.fontSize * 0.42;
-                fit.lines.forEach((line, idx) => {
-                    doc.text(line, textX, 128 + (idx * lineHeight));
-                });
-            }
-
-            // 3. geb. am (1 Zeile)
-            if (gebAm) {
-                doc.setFontSize(9);
-                doc.text(gebAm, textX, 140);
-            }
-
-            // 4. in (max. 2 Zeilen mit Auto-Scale)
-            if (gebOrt) {
-                const fit = calculateTextFit(gebOrt, maxTextWidth, 9, 6.5, 2);
-                doc.setFontSize(fit.fontSize);
-                const lineHeight = fit.fontSize * 0.42;
-                fit.lines.forEach((line, idx) => {
-                    doc.text(line, textX, 146 + (idx * lineHeight));
-                });
-            }
-
-            // 5. Foto (falls vorhanden)
-            if (photoDataUrl) {
+            // Draw Photo if present (Passfoto frame: x=9.5mm, y=112.3mm, w=33.3mm, h=42.4mm)
+            if (fotoUrl) {
                 try {
-                    doc.addImage(photoDataUrl, 'JPEG', photoX, photoY, photoW, photoH);
+                    doc.addImage(fotoUrl, 'JPEG', 9.5, 112.3, 33.3, 42.4);
                 } catch (e) {
-                    console.error('Fehler beim Einfügen des Fotos:', e);
+                    console.warn("Konnte Foto nicht ins PDF einbetten:", e);
                 }
             }
 
-            // Enable Auto-Print metadata
+            // Set font formatting
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(11);
+            doc.setTextColor(15, 23, 42); // slate-900
+
+            // Vorname (Zeile 1 ab x=55.0mm, Zeile 2 ab x=46.0mm)
+            if (vorname) {
+                const vornameLines = doc.splitTextToSize(vorname, 38);
+                if (vornameLines.length > 0) {
+                    doc.text(vornameLines[0], 55.0, 117.2);
+                }
+                if (vornameLines.length > 1) {
+                    doc.text(vornameLines.slice(1).join(" "), 46.0, 122.0);
+                }
+            }
+
+            // Nachname (ab x=46.0mm, y=129.5mm)
+            if (nachname) {
+                const nachnameLines = doc.splitTextToSize(nachname, 40);
+                doc.text(nachnameLines, 46.0, 129.5);
+            }
+
+            // Geburtsdatum & Geburtsort
+            doc.setFontSize(10);
+            if (geburtsdatum) {
+                doc.text(geburtsdatum, 48.0, 141.5);
+            }
+            if (geburtsort) {
+                doc.text(geburtsort, 42.0, 150.5);
+            }
+
+            // Open PDF Print Preview Dialog
             doc.autoPrint();
-
-            // Create Blob URL
-            const pdfBlob = doc.output('blob');
-            const blobUrl = URL.createObjectURL(pdfBlob);
-
-            // Open PDF in new tab
-            window.open(blobUrl, '_blank');
-
-            // Trigger print dialog reliably using iframe
-            const iframe = document.getElementById('printIframe');
-            iframe.src = blobUrl;
-            iframe.onload = function() {
-                setTimeout(function() {
-                    try {
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                    } catch (e) {
-                        console.error('Druckaufruf fehlgeschlagen:', e);
-                    }
-                }, 300);
-            };
+            window.open(doc.output('bloburl'), '_blank');
         }
 
-        // Initialize preview on load
-        window.onload = function() {
-            updatePreview();
-        };
+        // --- Modal & Utility Functions ---
+        function openImageZoomModal() {
+            if (!currentFotoUrl) return;
+            document.getElementById('modalZoomImg').src = currentFotoUrl;
+            const modal = document.getElementById('zoomModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeImageZoomModal() {
+            const modal = document.getElementById('zoomModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openDeleteModal() {
+            if (records.length === 0 || currentIndex < 0 || currentIndex >= records.length) return;
+            document.getElementById('deleteModal').classList.remove('hidden');
+            document.getElementById('deleteModal').classList.add('flex');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.add('hidden');
+            document.getElementById('deleteModal').classList.remove('flex');
+        }
+
+        async function confirmDeleteRecord() {
+            closeDeleteModal();
+            const rec = records[currentIndex];
+
+            if (rec && rec.id && supabaseClient && !isLocalMode) {
+                try {
+                    await supabaseClient.from(TABLE_NAME).delete().eq('id', rec.id);
+                } catch (err) {
+                    console.warn("Fehler beim Löschen:", err);
+                }
+            }
+
+            records.splice(currentIndex, 1);
+            if (records.length === 0) {
+                resetForm();
+            } else {
+                if (currentIndex >= records.length) currentIndex = records.length - 1;
+                populateFormWithRecord(records[currentIndex]);
+            }
+        }
     </script>
 </body>
 </html>
