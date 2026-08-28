@@ -5,12 +5,14 @@ import { jsPDF } from 'jspdf';
 const DEFAULT_BACKGROUND_URL = "https://otcegorzfuyumnflanas.supabase.co/storage/v1/object/public/passbilder/Fahrausweis-fuer-Krane-1024x724-2.jpeg";
 const A4_WIDTH_MM = 297;
 const A4_HEIGHT_MM = 210;
+const PREVIEW_WIDTH = 1024;
+const PREVIEW_HEIGHT = 724;
 const FIELD_POSITIONS = {
   photo: { top: 54, left: 2.4, width: 11.5, height: 21.4 },
-  firstName: { baseline: 55.3, left: 17.7, width: 6.8, previewSize: '0.8cqw', pdfSize: 6 },
-  lastName: { baseline: 60.2, left: 17.7, width: 6.8, previewSize: '0.7cqw', pdfSize: 5.5 },
-  birthDate: { baseline: 65.3, left: 17.7, width: 6.8, previewSize: '0.62cqw', pdfSize: 4.8 },
-  birthPlace: { baseline: 69.2, left: 16.1, width: 8.4, previewSize: '0.62cqw', pdfSize: 4.8 }
+  firstName: { baseline: 55.28, left: 18.71, width: 6.8, previewFontPx: 8, pdfSize: 6 },
+  lastName: { baseline: 61.84, left: 14.67, width: 6.8, previewFontPx: 8, pdfSize: 6 },
+  birthDate: { baseline: 66.2, left: 18.04, width: 6.8, previewFontPx: 7, pdfSize: 5.5 },
+  birthPlace: { baseline: 68.56, left: 16.1, width: 8.4, previewFontPx: 7, pdfSize: 5.5 }
 };
 
 const percentToMm = (percent, totalMm) => (percent / 100) * totalMm;
@@ -33,6 +35,88 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('');
   const [dateError, setDateError] = useState(false);
   const iframeRef = useRef(null);
+  const previewOverlayRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = previewOverlayRef.current;
+    if (!canvas) return;
+
+    canvas.width = PREVIEW_WIDTH;
+    canvas.height = PREVIEW_HEIGHT;
+    const context = canvas.getContext('2d');
+    context.clearRect(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+    context.fillStyle = '#0f172a';
+    context.textAlign = 'left';
+    context.textBaseline = 'alphabetic';
+
+    const drawText = (value, field, maxLines = 1) => {
+      if (!value) return;
+      const x = (field.left / 100) * PREVIEW_WIDTH;
+      const baseline = (field.baseline / 100) * PREVIEW_HEIGHT;
+      const maxWidth = (field.width / 100) * PREVIEW_WIDTH;
+      const previewScale = canvas.clientWidth / PREVIEW_WIDTH;
+      let fontSize = field.previewFontPx
+        ? field.previewFontPx / previewScale
+        : field.pdfSize * (PREVIEW_WIDTH / A4_WIDTH_MM) * (25.4 / 72);
+      const lineHeight = fontSize * 1.25;
+
+      context.font = `${fontSize}px Helvetica, Arial, sans-serif`;
+      while (fontSize > 3 && context.measureText(value).width > maxWidth) {
+        fontSize -= 0.25;
+        context.font = `${fontSize}px Helvetica, Arial, sans-serif`;
+      }
+
+      if (maxLines === 1) {
+        context.fillText(value, x, baseline, maxWidth);
+        return;
+      }
+
+      const words = value.split(/\s+/);
+      const lines = [];
+      let line = '';
+      words.forEach(word => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && context.measureText(candidate).width > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      });
+      if (line) lines.push(line);
+      lines.slice(0, maxLines).forEach((text, index) => {
+        context.fillText(text, x, baseline + (index * lineHeight), maxWidth);
+      });
+    };
+
+    const drawPhoto = () => {
+      if (!photoPreview) return;
+      const image = new Image();
+      image.onload = () => {
+        const x = (FIELD_POSITIONS.photo.left / 100) * PREVIEW_WIDTH;
+        const y = (FIELD_POSITIONS.photo.top / 100) * PREVIEW_HEIGHT;
+        const width = (FIELD_POSITIONS.photo.width / 100) * PREVIEW_WIDTH;
+        const height = (FIELD_POSITIONS.photo.height / 100) * PREVIEW_HEIGHT;
+        const scale = Math.max(width / image.width, height / image.height);
+        const drawnWidth = image.width * scale;
+        const drawnHeight = image.height * scale;
+        const drawnY = y + ((height - drawnHeight) / 2);
+        context.save();
+        context.beginPath();
+        context.rect(x, y, width, height);
+        context.clip();
+        context.drawImage(image, x, drawnY, drawnWidth, drawnHeight);
+        context.restore();
+      };
+      image.src = photoPreview;
+    };
+
+    drawPhoto();
+    drawText(formData.vorname, FIELD_POSITIONS.firstName);
+    drawText(formData.nachname, FIELD_POSITIONS.lastName, 2);
+    drawText(!dateError ? formData.gebAm : '', FIELD_POSITIONS.birthDate);
+    drawText(formData.gebOrt, FIELD_POSITIONS.birthPlace, 2);
+  }, [dateError, formData.gebAm, formData.gebOrt, formData.nachname, formData.vorname, photoPreview]);
 
   // Datensätze aus Supabase laden
   const fetchRecords = async () => {
@@ -310,7 +394,7 @@ export default function App() {
               {/* Foto Upload & Mini-Vorschau */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Foto</label>
-                <div className="flex items-center space-x-3">
+                <div className="flex min-w-0 items-center space-x-3">
                   {photoPreview && (
                     <img 
                       src={photoPreview} 
@@ -319,8 +403,8 @@ export default function App() {
                       className="w-10 h-12 object-cover object-left rounded border border-slate-300 cursor-pointer hover:opacity-80 transition-all shrink-0" 
                     />
                   )}
-                  <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center space-x-2 transition-all w-full justify-center">
-                    <span>{selectedFile ? selectedFile.name : (photoPreview ? 'Anderes Foto wählen...' : 'Passfoto auswählen...')}</span>
+                  <label className="min-w-0 flex-1 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center space-x-2 transition-all justify-center overflow-hidden">
+                    <span className="min-w-0 truncate">{selectedFile ? selectedFile.name : (photoPreview ? 'Anderes Foto wählen...' : 'Passfoto auswählen...')}</span>
                     <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
                   </label>
                   {photoPreview && (
@@ -426,32 +510,11 @@ export default function App() {
                 className="w-full relative shadow border border-slate-200 overflow-hidden" 
                 style={{ aspectRatio: '1024 / 724', backgroundImage: `url(${DEFAULT_BACKGROUND_URL})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}
               >
-                {/* Passfoto Vorschau */}
-                <div className="absolute flex items-center justify-center overflow-hidden" style={{ top: `${FIELD_POSITIONS.photo.top}%`, left: `${FIELD_POSITIONS.photo.left}%`, width: `${FIELD_POSITIONS.photo.width}%`, height: `${FIELD_POSITIONS.photo.height}%` }}>
-                  {photoPreview && (
-                    <img src={photoPreview} alt="Vorschau" className="w-full h-full object-cover object-left" />
-                  )}
-                </div>
-
-                {/* Vorname */}
-                <div className="absolute leading-none text-slate-900 font-sans truncate" style={{ top: `${FIELD_POSITIONS.firstName.baseline}%`, left: `${FIELD_POSITIONS.firstName.left}%`, width: `${FIELD_POSITIONS.firstName.width}%`, fontSize: FIELD_POSITIONS.firstName.previewSize, transform: 'translateY(-0.85em)' }}>
-                  {formData.vorname}
-                </div>
-
-                {/* Nachname */}
-                <div className="absolute leading-tight text-slate-900 font-sans break-words line-clamp-2" style={{ top: `${FIELD_POSITIONS.lastName.baseline}%`, left: `${FIELD_POSITIONS.lastName.left}%`, width: `${FIELD_POSITIONS.lastName.width}%`, fontSize: FIELD_POSITIONS.lastName.previewSize, transform: 'translateY(-0.85em)' }}>
-                  {formData.nachname}
-                </div>
-
-                {/* geb. am */}
-                <div className="absolute leading-none text-slate-900 font-sans truncate" style={{ top: `${FIELD_POSITIONS.birthDate.baseline}%`, left: `${FIELD_POSITIONS.birthDate.left}%`, width: `${FIELD_POSITIONS.birthDate.width}%`, fontSize: FIELD_POSITIONS.birthDate.previewSize, transform: 'translateY(-0.85em)' }}>
-                  {!dateError ? formData.gebAm : ''}
-                </div>
-
-                {/* in */}
-                <div className="absolute leading-tight text-slate-900 font-sans break-words line-clamp-2" style={{ top: `${FIELD_POSITIONS.birthPlace.baseline}%`, left: `${FIELD_POSITIONS.birthPlace.left}%`, width: `${FIELD_POSITIONS.birthPlace.width}%`, fontSize: FIELD_POSITIONS.birthPlace.previewSize, transform: 'translateY(-0.85em)' }}>
-                  {formData.gebOrt}
-                </div>
+                <canvas
+                  ref={previewOverlayRef}
+                  aria-label="Vorschau der eingegebenen Daten"
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
               </div>
             </div>
           </div>
