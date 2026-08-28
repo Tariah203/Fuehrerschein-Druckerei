@@ -3,6 +3,17 @@ import { supabase } from './supabaseClient';
 import { jsPDF } from 'jspdf';
 
 const DEFAULT_BACKGROUND_URL = "https://otcegorzfuyumnflanas.supabase.co/storage/v1/object/public/passbilder/Fahrausweis-fuer-Krane-1024x724-2.jpeg";
+const A4_WIDTH_MM = 297;
+const A4_HEIGHT_MM = 210;
+const FIELD_POSITIONS = {
+  photo: { top: 54, left: 2.4, width: 11.5, height: 21.4 },
+  firstName: { baseline: 55.3, left: 17.7, width: 6.8, previewSize: '0.8cqw', pdfSize: 6 },
+  lastName: { baseline: 60.2, left: 17.7, width: 6.8, previewSize: '0.7cqw', pdfSize: 5.5 },
+  birthDate: { baseline: 65.3, left: 17.7, width: 6.8, previewSize: '0.62cqw', pdfSize: 4.8 },
+  birthPlace: { baseline: 69.2, left: 16.1, width: 8.4, previewSize: '0.62cqw', pdfSize: 4.8 }
+};
+
+const percentToMm = (percent, totalMm) => (percent / 100) * totalMm;
 
 export default function App() {
   const [records, setRecords] = useState([]);
@@ -225,32 +236,39 @@ export default function App() {
 
       // PDF Generieren
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const photoX = 6;
-      const photoY = 116;
-      const photoW = 28;
-      const photoH = 37;
-      const textX = 36;
+      const photoX = percentToMm(FIELD_POSITIONS.photo.left, A4_WIDTH_MM);
+      const photoY = percentToMm(FIELD_POSITIONS.photo.top, A4_HEIGHT_MM);
+      const photoW = percentToMm(FIELD_POSITIONS.photo.width, A4_WIDTH_MM);
+      const photoH = percentToMm(FIELD_POSITIONS.photo.height, A4_HEIGHT_MM);
+      const firstNameX = percentToMm(FIELD_POSITIONS.firstName.left, A4_WIDTH_MM);
+      const lastNameX = percentToMm(FIELD_POSITIONS.lastName.left, A4_WIDTH_MM);
+      const birthDateX = percentToMm(FIELD_POSITIONS.birthDate.left, A4_WIDTH_MM);
+      const birthPlaceX = percentToMm(FIELD_POSITIONS.birthPlace.left, A4_WIDTH_MM);
+      const lastNameWidth = percentToMm(FIELD_POSITIONS.lastName.width, A4_WIDTH_MM);
+      const birthPlaceWidth = percentToMm(FIELD_POSITIONS.birthPlace.width, A4_WIDTH_MM);
 
       doc.setFont('Helvetica', 'normal');
       doc.setTextColor(0, 0, 0);
 
       if (formData.vorname) {
-        doc.setFontSize(9);
-        doc.text(formData.vorname, textX, 120);
+        doc.setFontSize(FIELD_POSITIONS.firstName.pdfSize);
+        doc.text(formData.vorname, firstNameX, percentToMm(FIELD_POSITIONS.firstName.baseline, A4_HEIGHT_MM));
       }
       if (formData.nachname) {
-        doc.setFontSize(9);
-        const lines = doc.splitTextToSize(formData.nachname, 33);
-        lines.slice(0, 2).forEach((l, i) => doc.text(l, textX, 128 + (i * 3.8)));
+        doc.setFontSize(FIELD_POSITIONS.lastName.pdfSize);
+        const lines = doc.splitTextToSize(formData.nachname, lastNameWidth);
+        const lastNameY = percentToMm(FIELD_POSITIONS.lastName.baseline, A4_HEIGHT_MM);
+        lines.slice(0, 2).forEach((l, i) => doc.text(l, lastNameX, lastNameY + (i * 2.5)));
       }
       if (formData.gebAm) {
-        doc.setFontSize(9);
-        doc.text(formData.gebAm, textX, 140);
+        doc.setFontSize(FIELD_POSITIONS.birthDate.pdfSize);
+        doc.text(formData.gebAm, birthDateX, percentToMm(FIELD_POSITIONS.birthDate.baseline, A4_HEIGHT_MM));
       }
       if (formData.gebOrt) {
-        doc.setFontSize(9);
-        const lines = doc.splitTextToSize(formData.gebOrt, 33);
-        lines.slice(0, 2).forEach((l, i) => doc.text(l, textX, 146 + (i * 3.8)));
+        doc.setFontSize(FIELD_POSITIONS.birthPlace.pdfSize);
+        const lines = doc.splitTextToSize(formData.gebOrt, birthPlaceWidth);
+        const birthPlaceY = percentToMm(FIELD_POSITIONS.birthPlace.baseline, A4_HEIGHT_MM);
+        lines.slice(0, 2).forEach((l, i) => doc.text(l, birthPlaceX, birthPlaceY + (i * 2.5)));
       }
 
       if (photoPreview) {
@@ -286,8 +304,8 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Linke Spalte: Formular */}
-          <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
-            <form onSubmit={handleSubmitAndPrint} className="space-y-4">
+          <div className="lg:col-span-5 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200">
+            <form onSubmit={handleSubmitAndPrint} className="space-y-3">
               
               {/* Foto Upload & Mini-Vorschau */}
               <div>
@@ -307,7 +325,13 @@ export default function App() {
                   </label>
                   {photoPreview && (
                     <button type="button" onClick={removePhoto} className="bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-lg border border-red-200" title="Foto löschen">
-                      ✕
+                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4h8v2" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v5" />
+                        <path d="M14 11v5" />
+                      </svg>
                     </button>
                   )}
                 </div>
@@ -321,7 +345,7 @@ export default function App() {
                   placeholder="Vorname"
                   value={formData.vorname}
                   onChange={e => setFormData({ ...formData, vorname: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
                 />
               </div>
 
@@ -333,7 +357,7 @@ export default function App() {
                   placeholder="Nachname / Familienname"
                   value={formData.nachname}
                   onChange={e => setFormData({ ...formData, nachname: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
+                  className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
                 />
               </div>
 
@@ -347,7 +371,7 @@ export default function App() {
                   value={formData.gebAm}
                   onChange={e => handleDateChange(e.target.value)}
                   onBlur={finalizeDate}
-                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 text-sm outline-none ${
+                  className={`w-full px-3.5 py-2 border rounded-lg focus:ring-2 text-sm outline-none ${
                     dateError ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'bg-slate-50 border-slate-300 focus:ring-indigo-500 focus:bg-white'
                   }`}
                 />
@@ -362,7 +386,7 @@ export default function App() {
                   placeholder="Geburtsort"
                   value={formData.gebOrt}
                   onChange={e => setFormData({ ...formData, gebOrt: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
+                  className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
                 />
               </div>
 
@@ -371,24 +395,24 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all text-base disabled:opacity-50"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow-lg transition-all text-base disabled:opacity-50"
                 >
                   {loading ? (statusMsg || 'Verarbeite...') : 'Speichern & Drucken'}
                 </button>
               </div>
 
               {/* Navigation & Aktionen */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                <div className="flex items-center space-x-1">
-                  <button type="button" onClick={() => loadRecord(records[0], 0)} disabled={currentIndex <= 0} className="px-2.5 py-1.5 border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">|&lt;</button>
-                  <button type="button" onClick={() => loadRecord(records[currentIndex - 1], currentIndex - 1)} disabled={currentIndex <= 0} className="px-2.5 py-1.5 border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&lt;</button>
-                  <span className="text-xs text-slate-500 px-2">{records.length > 0 && currentIndex >= 0 ? `${currentIndex + 1} / ${records.length}` : '- / -'}</span>
-                  <button type="button" onClick={() => loadRecord(records[currentIndex + 1], currentIndex + 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="px-2.5 py-1.5 border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;</button>
-                  <button type="button" onClick={() => loadRecord(records[records.length - 1], records.length - 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="px-2.5 py-1.5 border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;|</button>
+              <div className="flex flex-nowrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <div className="flex shrink-0 items-center space-x-1">
+                  <button type="button" onClick={() => loadRecord(records[0], 0)} disabled={currentIndex <= 0} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">|&lt;</button>
+                  <button type="button" onClick={() => loadRecord(records[currentIndex - 1], currentIndex - 1)} disabled={currentIndex <= 0} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&lt;</button>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-slate-500 px-1">{records.length > 0 && currentIndex >= 0 ? `${currentIndex + 1} / ${records.length}` : '- / -'}</span>
+                  <button type="button" onClick={() => loadRecord(records[currentIndex + 1], currentIndex + 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;</button>
+                  <button type="button" onClick={() => loadRecord(records[records.length - 1], records.length - 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;|</button>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <button type="button" onClick={handleNew} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border rounded text-xs font-semibold">+ Neu</button>
-                  <button type="button" onClick={handleDelete} disabled={!formData.id} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Löschen</button>
+                <div className="flex shrink-0 items-center space-x-1.5">
+                  <button type="button" onClick={handleNew} className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded text-xs font-semibold">+ Neu</button>
+                  <button type="button" onClick={handleDelete} disabled={!formData.id} className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Löschen</button>
                 </div>
               </div>
 
@@ -403,29 +427,29 @@ export default function App() {
                 style={{ aspectRatio: '1024 / 724', backgroundImage: `url(${DEFAULT_BACKGROUND_URL})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}
               >
                 {/* Passfoto Vorschau */}
-                <div className="absolute top-[39.2%] left-[2.1%] w-[9.4%] h-[25.2%] flex items-center justify-center overflow-hidden">
+                <div className="absolute flex items-center justify-center overflow-hidden" style={{ top: `${FIELD_POSITIONS.photo.top}%`, left: `${FIELD_POSITIONS.photo.left}%`, width: `${FIELD_POSITIONS.photo.width}%`, height: `${FIELD_POSITIONS.photo.height}%` }}>
                   {photoPreview && (
                     <img src={photoPreview} alt="Vorschau" className="w-full h-full object-cover object-left" />
                   )}
                 </div>
 
                 {/* Vorname */}
-                <div className="absolute top-[40.6%] left-[12.2%] w-[11.1%] text-[1.1cqw] leading-none text-slate-900 font-sans truncate">
+                <div className="absolute leading-none text-slate-900 font-sans truncate" style={{ top: `${FIELD_POSITIONS.firstName.baseline}%`, left: `${FIELD_POSITIONS.firstName.left}%`, width: `${FIELD_POSITIONS.firstName.width}%`, fontSize: FIELD_POSITIONS.firstName.previewSize, transform: 'translateY(-0.85em)' }}>
                   {formData.vorname}
                 </div>
 
                 {/* Nachname */}
-                <div className="absolute top-[43.3%] left-[12.2%] w-[11.1%] text-[1.1cqw] leading-tight text-slate-900 font-sans break-words line-clamp-2">
+                <div className="absolute leading-tight text-slate-900 font-sans break-words line-clamp-2" style={{ top: `${FIELD_POSITIONS.lastName.baseline}%`, left: `${FIELD_POSITIONS.lastName.left}%`, width: `${FIELD_POSITIONS.lastName.width}%`, fontSize: FIELD_POSITIONS.lastName.previewSize, transform: 'translateY(-0.85em)' }}>
                   {formData.nachname}
                 </div>
 
                 {/* geb. am */}
-                <div className="absolute top-[47.4%] left-[12.2%] w-[11.1%] text-[1.1cqw] leading-none text-slate-900 font-sans truncate">
+                <div className="absolute leading-none text-slate-900 font-sans truncate" style={{ top: `${FIELD_POSITIONS.birthDate.baseline}%`, left: `${FIELD_POSITIONS.birthDate.left}%`, width: `${FIELD_POSITIONS.birthDate.width}%`, fontSize: FIELD_POSITIONS.birthDate.previewSize, transform: 'translateY(-0.85em)' }}>
                   {!dateError ? formData.gebAm : ''}
                 </div>
 
                 {/* in */}
-                <div className="absolute top-[49.4%] left-[12.2%] w-[11.1%] text-[1.1cqw] leading-tight text-slate-900 font-sans break-words line-clamp-2">
+                <div className="absolute leading-tight text-slate-900 font-sans break-words line-clamp-2" style={{ top: `${FIELD_POSITIONS.birthPlace.baseline}%`, left: `${FIELD_POSITIONS.birthPlace.left}%`, width: `${FIELD_POSITIONS.birthPlace.width}%`, fontSize: FIELD_POSITIONS.birthPlace.previewSize, transform: 'translateY(-0.85em)' }}>
                   {formData.gebOrt}
                 </div>
               </div>
