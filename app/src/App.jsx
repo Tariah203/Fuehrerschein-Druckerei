@@ -12,7 +12,7 @@ const FIELD_POSITIONS = {
   photo: { top: 54, left: 2.4, width: 11.5, height: 21.4 },
   firstName: { baseline: 55.28, left: 18.71, width: 6.8, previewFontPx: 8, pdfSize: 6 },
   lastName: { baseline: 61.84, left: 14.67, width: 6.8, previewFontPx: 8, pdfSize: 6 },
-  birthDate: { baseline: 66.2, left: 18.04, width: 6.8, previewFontPx: 7, pdfSize: 5.5 },
+  birthDate: { baseline: 66.2, left: 19.04, width: 6.8, previewFontPx: 7, pdfSize: 5.5 },
   birthPlace: { baseline: 68.56, left: 16.1, width: 8.4, previewFontPx: 7, pdfSize: 5.5 }
 };
 
@@ -57,7 +57,7 @@ export default function App() {
       const x = (field.left / 100) * PREVIEW_WIDTH;
       const baseline = (field.baseline / 100) * PREVIEW_HEIGHT;
       const maxWidth = (field.width / 100) * PREVIEW_WIDTH;
-      const previewScale = canvas.clientWidth / PREVIEW_WIDTH;
+      const previewScale = canvas.width / PREVIEW_WIDTH;
       let fontSize = field.previewFontPx
         ? field.previewFontPx / previewScale
         : field.pdfSize * (PREVIEW_WIDTH / A4_WIDTH_MM) * (25.4 / 72);
@@ -130,9 +130,6 @@ export default function App() {
         .order('id', { ascending: true });
       if (error) throw error;
       setRecords(data || []);
-      if (data && data.length > 0 && currentIndex === -1) {
-        loadRecord(data[0], 0);
-      }
     } catch (err) {
       console.error('Fehler beim Laden:', err.message);
     }
@@ -140,6 +137,7 @@ export default function App() {
 
   useEffect(() => {
     fetchRecords();
+    handleNew();
   }, []);
 
   const loadRecord = (rec, idx) => {
@@ -419,22 +417,29 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Linke Spalte: Formular */}
-          <div className="lg:col-span-5 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200">
+          <div className="lg:col-span-12 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200">
             <form onSubmit={handleSubmitAndPrint} className="space-y-3">
               
               {/* Suchfeld */}
               <div className="relative">
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Eintrag suchen</label>
-                <input
-                  type="text"
-                  placeholder="Nach Vorname, Name, Datum oder Ort suchen..."
-                  value={searchQuery}
-                  onChange={e => {
-                    setSearchQuery(e.target.value);
-                    setShowSearchResults(e.target.value.trim().length > 0);
-                  }}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
-                />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-slate-500 shadow-sm">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                      <circle cx="11" cy="11" r="6" />
+                      <path d="m16 16 5 5" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Nach vorhandenem Eintrag suchen"
+                    value={searchQuery}
+                    onChange={e => {
+                      setSearchQuery(e.target.value);
+                      setShowSearchResults(e.target.value.trim().length > 0);
+                    }}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
+                  />
+                </div>
                 
                 {/* Dropdown mit Suchergebnissen */}
                 {showSearchResults && searchQuery.trim().length > 0 && (
@@ -464,87 +469,125 @@ export default function App() {
                 )}
               </div>
               
-              {/* Foto Upload & Mini-Vorschau */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Foto</label>
-                <div className="flex min-w-0 items-center space-x-3">
-                  {photoPreview && (
-                    <img 
-                      src={photoPreview} 
-                      alt="Passfoto" 
-                      onClick={() => setIsModalOpen(true)}
-                      className="w-10 h-12 object-cover object-left rounded border border-slate-300 cursor-pointer hover:opacity-80 transition-all shrink-0" 
-                    />
-                  )}
-                  <label className="min-w-0 flex-1 cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 flex items-center space-x-2 transition-all justify-center overflow-hidden">
-                    <span className="min-w-0 truncate">{selectedFile ? selectedFile.name : (photoPreview ? 'Anderes Foto wählen...' : 'Passfoto auswählen...')}</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+              <div className="flex items-stretch gap-4">
+                {/* Foto Upload & Vorschau */}
+                <div className="shrink-0 self-stretch">
+                  <label className="relative block h-full cursor-pointer">
+                    <div className="group relative mx-auto flex h-full w-[9.5rem] min-h-[12.5rem] items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 transition-all hover:border-indigo-400 hover:bg-indigo-50">
+                      {photoPreview ? (
+                        <>
+                          <img
+                            src={photoPreview}
+                            alt="Passfoto"
+                            className="h-full w-full object-cover object-center"
+                          />
+                          <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-gradient-to-t from-slate-900/55 via-slate-900/10 to-transparent p-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                document.getElementById('photo-upload-input')?.click();
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-white/85 text-slate-700 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                              title="Foto ändern"
+                              aria-label="Foto ändern"
+                            >
+                              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removePhoto();
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-white/85 text-red-600 shadow-sm backdrop-blur-sm transition hover:bg-white"
+                              title="Foto löschen"
+                              aria-label="Foto löschen"
+                            >
+                              <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v5" />
+                                <path d="M14 11v5" />
+                              </svg>
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-2 text-slate-600">
+                          <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
+                            <path d="M12 16V4" />
+                            <path d="m7 9 5-5 5 5" />
+                            <path d="M20 16.5v1.5A2 2 0 0 1 18 20H6a2 2 0 0 1-2-2v-1.5" />
+                          </svg>
+                          <span className="text-sm font-semibold">Foto hochladen</span>
+                        </div>
+                      )}
+                      <input id="photo-upload-input" type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+                    </div>
                   </label>
-                  {photoPreview && (
-                    <button type="button" onClick={removePhoto} className="bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-lg border border-red-200" title="Foto löschen">
-                      <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                        <path d="M3 6h18" />
-                        <path d="M8 6V4h8v2" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v5" />
-                        <path d="M14 11v5" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
-              </div>
 
-              {/* Vorname */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Vorname</label>
-                <input
-                  type="text"
-                  placeholder="Vorname"
-                  value={formData.vorname}
-                  onChange={e => setFormData({ ...formData, vorname: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
-                />
-              </div>
+                <div className="flex-1 self-stretch space-y-3 pt-1">
+                  {/* Vorname */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 min-w-20 text-left text-sm font-semibold text-slate-700">Vorname</label>
+                    <input
+                      type="text"
+                      placeholder="Vorname"
+                      value={formData.vorname}
+                      onChange={e => setFormData({ ...formData, vorname: e.target.value })}
+                      className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
+                    />
+                  </div>
 
-              {/* Nachname */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Name <span className="text-xs font-normal text-slate-500">(max. 2 Zeilen)</span></label>
-                <textarea
-                  rows="2"
-                  placeholder="Nachname / Familienname"
-                  value={formData.nachname}
-                  onChange={e => setFormData({ ...formData, nachname: e.target.value })}
-                  className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
-                />
-              </div>
+                  {/* Nachname */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 min-w-20 text-left text-sm font-semibold text-slate-700">Nachname</label>
+                    <textarea
+                      rows="2"
+                      placeholder="Nachname"
+                      value={formData.nachname}
+                      onChange={e => setFormData({ ...formData, nachname: e.target.value })}
+                      className="flex-1 px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
+                    />
+                  </div>
 
-              {/* geb. am */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">geb. am</label>
-                <input
-                  type="text"
-                  placeholder="TT.MM.JJJJ"
-                  maxLength={10}
-                  value={formData.gebAm}
-                  onChange={e => handleDateChange(e.target.value)}
-                  onBlur={finalizeDate}
-                  className={`w-full px-3.5 py-2 border rounded-lg focus:ring-2 text-sm outline-none ${
-                    dateError ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'bg-slate-50 border-slate-300 focus:ring-indigo-500 focus:bg-white'
-                  }`}
-                />
-                {dateError && <p className="text-xs text-red-600 mt-1">Ungültiges Datum (z. B. 15.05.1990).</p>}
-              </div>
+                  {/* geb. am */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 min-w-20 text-left text-sm font-semibold text-slate-700">geb. am</label>
+                    <input
+                      type="text"
+                      placeholder="TT.MM.JJJJ"
+                      maxLength={10}
+                      value={formData.gebAm}
+                      onChange={e => handleDateChange(e.target.value)}
+                      onBlur={finalizeDate}
+                      className={`flex-1 px-3.5 py-2 border rounded-lg focus:ring-2 text-sm outline-none ${
+                        dateError ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'bg-slate-50 border-slate-300 focus:ring-indigo-500 focus:bg-white'
+                      }`}
+                    />
+                  </div>
+                  {dateError && <p className="text-xs text-red-600 mt-1">Ungültiges Datum (z. B. 15.05.1990).</p>}
 
-              {/* in (Geburtsort) */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">in <span className="text-xs font-normal text-slate-500">(Geburtsort, max. 2 Zeilen)</span></label>
-                <textarea
-                  rows="2"
-                  placeholder="Geburtsort"
-                  value={formData.gebOrt}
-                  onChange={e => setFormData({ ...formData, gebOrt: e.target.value })}
-                  className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
-                />
+                  {/* in (Geburtsort) */}
+                  <div className="flex items-center gap-3">
+                    <label className="w-20 min-w-20 text-left text-sm font-semibold text-slate-700">Geburtsort</label>
+                    <textarea
+                      rows="2"
+                      placeholder="Geburtsort"
+                      value={formData.gebOrt}
+                      onChange={e => setFormData({ ...formData, gebOrt: e.target.value })}
+                      className="flex-1 px-3.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none resize-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Speichern & Drucken */}
@@ -568,30 +611,30 @@ export default function App() {
                   <button type="button" onClick={() => loadRecord(records[records.length - 1], records.length - 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;|</button>
                 </div>
                 <div className="flex shrink-0 items-center space-x-1.5">
-                  <button type="button" onClick={handleNew} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded text-xs font-semibold">+ Neu</button>
-                  <button type="button" onClick={handleDelete} disabled={!formData.id} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Löschen</button>
+                  <button type="button" onClick={handleNew} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-xs font-semibold">+ Neuen Datensatz anlegen</button>
+                  <button type="button" onClick={handleDelete} disabled={!formData.id} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Datensatz löschen</button>
                 </div>
               </div>
 
             </form>
           </div>
 
-          {/* Rechte Spalte: Live-Vorschau */}
-          <div className="lg:col-span-7 flex flex-col items-center">
-            <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col items-center">
-              <div 
-                className="w-full relative shadow border border-slate-200 overflow-hidden" 
-                style={{ aspectRatio: '1024 / 724', backgroundImage: `url(${DEFAULT_BACKGROUND_URL})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}
-              >
-                <canvas
-                  ref={previewOverlayRef}
-                  aria-label="Vorschau der eingegebenen Daten"
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                />
-              </div>
+        </div>
+
+        <div className="mt-8 w-full">
+          <h2 className="mb-3 text-left text-lg font-semibold text-slate-700">Druckvorschau</h2>
+          <div className="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col items-center">
+            <div 
+              className="w-full relative shadow border border-slate-200 overflow-hidden" 
+              style={{ aspectRatio: '1024 / 724', backgroundImage: `url(${DEFAULT_BACKGROUND_URL})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}
+            >
+              <canvas
+                ref={previewOverlayRef}
+                aria-label="Vorschau der eingegebenen Daten"
+                className="absolute inset-0 w-full h-full pointer-events-none"
+              />
             </div>
           </div>
-
         </div>
       </main>
 
