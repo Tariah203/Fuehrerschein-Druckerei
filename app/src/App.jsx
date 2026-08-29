@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { jsPDF } from 'jspdf';
 
 const DEFAULT_BACKGROUND_URL = "https://otcegorzfuyumnflanas.supabase.co/storage/v1/object/public/passbilder/Fahrausweis-fuer-Krane-1024x724-2.jpeg";
+const NEUTRANSLOG_LOGO_URL = "https://otcegorzfuyumnflanas.supabase.co/storage/v1/object/public/passbilder/LogoV2-2.png.pagespeed.ce.QYxV0-0Nbp.png";
 const A4_WIDTH_MM = 297;
 const A4_HEIGHT_MM = 210;
 const PREVIEW_WIDTH = 1024;
@@ -34,6 +35,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [dateError, setDateError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const iframeRef = useRef(null);
   const previewOverlayRef = useRef(null);
 
@@ -281,6 +284,23 @@ export default function App() {
     }
   };
 
+  const getFilteredRecords = () => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    return records.filter(rec => 
+      (rec.vorname && rec.vorname.toLowerCase().includes(query)) ||
+      (rec.nachname && rec.nachname.toLowerCase().includes(query)) ||
+      (rec.geburtsdatum && rec.geburtsdatum.includes(query)) ||
+      (rec.geburtsort && rec.geburtsort.toLowerCase().includes(query))
+    );
+  };
+
+  const handleSearchSelect = (rec, idx) => {
+    loadRecord(rec, idx);
+    setSearchQuery('');
+    setShowSearchResults(false);
+  };
+
   const handleSubmitAndPrint = async (e) => {
     e.preventDefault();
     finalizeDate();
@@ -384,12 +404,65 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-sans">
+      <header className="bg-slate-900 text-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-4 sm:flex-row md:px-8">
+          <a href="https://neutranslog.de" target="_blank" rel="noreferrer" aria-label="Neu Trans Log Webseite">
+            <img src={NEUTRANSLOG_LOGO_URL} alt="Neu Trans Log Beratung, Schulung, Prüfung" className="h-auto w-64 max-w-full" />
+          </a>
+          <div className="flex items-center gap-4 text-sm font-medium text-slate-200">
+            <span>Ausbildung &amp; Prüfung bundesweit</span>
+            <span className="border-l border-slate-600 pl-4">Führerschein-Drucker</span>
+          </div>
+        </div>
+      </header>
       <main className="max-w-7xl w-full mx-auto p-4 md:p-8 flex-1">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Linke Spalte: Formular */}
           <div className="lg:col-span-5 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200">
             <form onSubmit={handleSubmitAndPrint} className="space-y-3">
+              
+              {/* Suchfeld */}
+              <div className="relative">
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Eintrag suchen</label>
+                <input
+                  type="text"
+                  placeholder="Nach Vorname, Name, Datum oder Ort suchen..."
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    setShowSearchResults(e.target.value.trim().length > 0);
+                  }}
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm outline-none"
+                />
+                
+                {/* Dropdown mit Suchergebnissen */}
+                {showSearchResults && searchQuery.trim().length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                    {getFilteredRecords().length > 0 ? (
+                      getFilteredRecords().map((rec, idx) => {
+                        const recordIdx = records.findIndex(r => r.id === rec.id);
+                        return (
+                          <button
+                            key={rec.id}
+                            type="button"
+                            onClick={() => handleSearchSelect(rec, recordIdx)}
+                            className="w-full text-left px-4 py-3 hover:bg-indigo-50 border-b border-slate-200 last:border-b-0 transition-colors"
+                          >
+                            <div className="font-semibold text-slate-900">{rec.vorname} {rec.nachname}</div>
+                            <div className="text-xs text-slate-500">
+                              {rec.geburtsdatum && <span>geb. {rec.geburtsdatum}</span>}
+                              {rec.geburtsort && <span> • {rec.geburtsort}</span>}
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-slate-500">Keine Einträge gefunden</div>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {/* Foto Upload & Mini-Vorschau */}
               <div>
@@ -488,15 +561,15 @@ export default function App() {
               {/* Navigation & Aktionen */}
               <div className="flex flex-nowrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                 <div className="flex shrink-0 items-center space-x-1">
-                  <button type="button" onClick={() => loadRecord(records[0], 0)} disabled={currentIndex <= 0} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">|&lt;</button>
-                  <button type="button" onClick={() => loadRecord(records[currentIndex - 1], currentIndex - 1)} disabled={currentIndex <= 0} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&lt;</button>
+                  <button type="button" onClick={() => loadRecord(records[0], 0)} disabled={currentIndex <= 0} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">|&lt;</button>
+                  <button type="button" onClick={() => loadRecord(records[currentIndex - 1], currentIndex - 1)} disabled={currentIndex <= 0} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&lt;</button>
                   <span className="shrink-0 whitespace-nowrap text-xs text-slate-500 px-1">{records.length > 0 && currentIndex >= 0 ? `${currentIndex + 1} / ${records.length}` : '- / -'}</span>
-                  <button type="button" onClick={() => loadRecord(records[currentIndex + 1], currentIndex + 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;</button>
-                  <button type="button" onClick={() => loadRecord(records[records.length - 1], records.length - 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;|</button>
+                  <button type="button" onClick={() => loadRecord(records[currentIndex + 1], currentIndex + 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;</button>
+                  <button type="button" onClick={() => loadRecord(records[records.length - 1], records.length - 1)} disabled={currentIndex >= records.length - 1 || currentIndex === -1} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2 py-1 leading-none border rounded bg-slate-50 disabled:opacity-40 text-xs font-bold">&gt;|</button>
                 </div>
                 <div className="flex shrink-0 items-center space-x-1.5">
-                  <button type="button" onClick={handleNew} className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded text-xs font-semibold">+ Neu</button>
-                  <button type="button" onClick={handleDelete} disabled={!formData.id} className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Löschen</button>
+                  <button type="button" onClick={handleNew} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border rounded text-xs font-semibold">+ Neu</button>
+                  <button type="button" onClick={handleDelete} disabled={!formData.id} tabIndex="-1" className="shrink-0 whitespace-nowrap px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs font-semibold disabled:opacity-40">🗑 Löschen</button>
                 </div>
               </div>
 
@@ -532,7 +605,7 @@ export default function App() {
         </div>
       )}
 
-      <iframe ref={iframeRef} className="hidden" title="Print" />
+      <iframe ref={iframeRef} className="hidden" title="Print" tabIndex="-1" />
     </div>
   );
 }
